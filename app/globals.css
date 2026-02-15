@@ -1,22 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  /* Bailey's warm, dog-themed palette */
-  --primary: #d4a373; /* warm tan */
-  --primary-dark: #b8885c;
-  --secondary: #8b7355; /* brown */
-  --accent: #f4e4d7; /* cream */
-  --success: #7fb069; /* grass green */
-  --background: #faf8f5; /* off-white */
-  --text: #2d2d2d;
-  --text-light: #666;
-}
+@layer base {
+  :root {
+    /* Bailey's warm, dog-themed palette */
+    --primary: #d4a373; /* warm tan */
+    --primary-dark: #b8885c;
+    --secondary: #8b7355; /* brown */
+    --accent: #f4e4d7; /* cream */
+    --success: #7fb069; /* grass green */
+    --background: #faf8f5; /* off-white */
+    --text: #2d2d2d;
+    --text-light: #666;
+  }
 
-body {
-  background-color: var(--background);
-  color: var(--text);
+  body {
+    background-color: var(--background);
+    color: var(--text);
+  }
 }
 
 @layer utilities {
