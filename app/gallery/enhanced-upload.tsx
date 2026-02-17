@@ -49,7 +49,7 @@ export function EnhancedPhotoUpload({ onUploadComplete }: { onUploadComplete: ()
           preview: reader.result as string,
           progress: 0,
           status: error ? 'error' : 'pending',
-          error
+          error: error || undefined
         };
         newFiles.push(fileUpload);
         
