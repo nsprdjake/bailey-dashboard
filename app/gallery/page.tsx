@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export const dynamic = 'force-dynamic';
 import { supabase, type Photo } from '@/lib/supabase';
-import { Plus, Heart, X } from 'lucide-react';
+import { Plus, Heart, X, Upload, Image as ImageIcon, Link as LinkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function GalleryPage() {
@@ -12,6 +12,14 @@ export default function GalleryPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [filter, setFilter] = useState<'all' | 'favorites'>('all');
+  const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
     url: '',
     caption: '',
@@ -30,16 +38,126 @@ export default function GalleryPage() {
     setPhotos(data || []);
   }
 
+  function handleFileSelect(file: File) {
+    // Check file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    // Check file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      alert('Please upload a valid image file (JPG, PNG, HEIC, WebP, or GIF)');
+      return;
+    }
+
+    setSelectedFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDrag(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  }
+
+  async function uploadFile(file: File): Promise<string> {
+    // Generate unique filename
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filename = `${timestamp}_${sanitizedName}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('bailey-photos')
+      .upload(filename, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('bailey-photos')
+      .getPublicUrl(filename);
+
+    return urlData.publicUrl;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await supabase.from('bailey_photos').insert([formData]);
-    setFormData({
-      url: '',
-      caption: '',
-      date: new Date().toISOString().split('T')[0],
-    });
-    setShowForm(false);
-    loadPhotos();
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      let photoUrl = formData.url;
+
+      if (uploadMode === 'file' && selectedFile) {
+        // Simulate progress
+        setUploadProgress(30);
+        
+        // Upload file to Supabase Storage
+        photoUrl = await uploadFile(selectedFile);
+        
+        setUploadProgress(70);
+      }
+
+      if (!photoUrl) {
+        alert('Please select a file or enter a URL');
+        setUploading(false);
+        return;
+      }
+
+      // Save to database
+      await supabase.from('bailey_photos').insert([{
+        url: photoUrl,
+        caption: formData.caption,
+        date: formData.date
+      }]);
+
+      setUploadProgress(100);
+
+      // Reset form
+      setFormData({
+        url: '',
+        caption: '',
+        date: new Date().toISOString().split('T')[0],
+      });
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setShowForm(false);
+      setUploadProgress(0);
+      loadPhotos();
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to upload photo');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function toggleFavorite(photo: Photo) {
@@ -48,6 +166,18 @@ export default function GalleryPage() {
       .update({ is_favorite: !photo.is_favorite })
       .eq('id', photo.id);
     loadPhotos();
+  }
+
+  function resetForm() {
+    setShowForm(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setUploadProgress(0);
+    setFormData({
+      url: '',
+      caption: '',
+      date: new Date().toISOString().split('T')[0],
+    });
   }
 
   const filteredPhotos =
@@ -94,21 +224,143 @@ export default function GalleryPage() {
       {showForm && (
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 animate-bounce-in">
           <h2 className="text-2xl font-bold mb-4 text-[var(--primary)]">Add New Photo</h2>
+          
+          {/* Upload Mode Toggle */}
+          <div className="flex gap-2 mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setUploadMode('file');
+                setFormData({ ...formData, url: '' });
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                uploadMode === 'file'
+                  ? 'bg-[var(--primary)] text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Upload className="w-5 h-5" />
+              Upload from Device
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUploadMode('url');
+                setSelectedFile(null);
+                setPreviewUrl(null);
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                uploadMode === 'url'
+                  ? 'bg-[var(--primary)] text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <LinkIcon className="w-5 h-5" />
+              Use URL
+            </button>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Photo URL</label>
-              <input
-                type="url"
-                value={formData.url}
-                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                required
-                placeholder="https://..."
-              />
-              <p className="text-xs text-[var(--text-light)] mt-1">
-                Tip: Upload to Imgur, Cloudinary, or use a direct image URL
-              </p>
-            </div>
+            {uploadMode === 'file' ? (
+              <>
+                {/* File Upload Area */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Photo</label>
+                  <div
+                    className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                      dragActive
+                        ? 'border-[var(--primary)] bg-[var(--accent)]'
+                        : 'border-gray-300 hover:border-[var(--primary)]'
+                    }`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/heic,image/heif,image/webp,image/gif"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileSelect(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    
+                    {previewUrl ? (
+                      <div className="space-y-4">
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className="max-h-64 mx-auto rounded-lg shadow-md"
+                        />
+                        <p className="text-sm text-gray-600">
+                          {selectedFile?.name} ({(selectedFile!.size / 1024 / 1024).toFixed(2)} MB)
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFile(null);
+                            setPreviewUrl(null);
+                          }}
+                          className="text-sm text-[var(--primary)] hover:underline"
+                        >
+                          Choose different file
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <ImageIcon className="w-16 h-16 mx-auto text-gray-400" />
+                        <div>
+                          <p className="text-lg font-medium text-gray-700">
+                            Drop your photo here, or click to browse
+                          </p>
+                          <p className="text-sm text-gray-500 mt-2">
+                            Supports JPG, PNG, HEIC, WebP, GIF (max 10MB)
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Upload Progress */}
+                {uploading && uploadProgress > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Uploading...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-[var(--primary)] h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium mb-2">Photo URL</label>
+                <input
+                  type="url"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                  required
+                  placeholder="https://..."
+                />
+                <p className="text-xs text-[var(--text-light)] mt-1">
+                  Tip: Upload to Imgur, Cloudinary, or use a direct image URL
+                </p>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium mb-2">Date</label>
               <input
@@ -119,6 +371,7 @@ export default function GalleryPage() {
                 required
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium mb-2">Caption (optional)</label>
               <input
@@ -129,17 +382,20 @@ export default function GalleryPage() {
                 placeholder="What's happening in this photo?"
               />
             </div>
+            
             <div className="flex gap-3">
               <button
                 type="submit"
-                className="flex-1 bg-[var(--primary)] text-white px-6 py-3 rounded-lg hover:bg-[var(--primary-dark)] transition-colors"
+                disabled={uploading || (uploadMode === 'file' && !selectedFile)}
+                className="flex-1 bg-[var(--primary)] text-white px-6 py-3 rounded-lg hover:bg-[var(--primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Add Photo
+                {uploading ? 'Uploading...' : 'Add Photo'}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={resetForm}
+                disabled={uploading}
+                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bailey Health Dashboard - Quick Start</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+        }
+
+        .btn.success {
+            background: #48bb78;
+        }
+
+        .btn.success:hover {
+            background: #38a169;
+        }
+
+        .btn.warning {
+            background: #ed8936;
+        }
+
+        .btn.warning:hover {
+            background: #dd6b20;
+        }
+
+        .btn.danger {
+            background: #e53e3e;
+        }
+
+        .btn.danger:hover {
+            background: #c53030;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            background: #f7fafc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .timestamp {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .severity {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .severity.low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .severity.medium {
+            background: #fefcbf;
+            color: #744210;
+        }
+
+        .severity.high {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .appointments {
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .appointment-item {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #81e6d9;
+        }
+
+        .appointment-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .medication-list {
+            list-style: none;
+        }
+
+        .medication-list li {
+            background: #f0fff4;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border-left: 4px solid #48bb78;
+        }
+
+        #alertMessage {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #48bb78;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐕 Bailey's Health Dashboard</h1>
+
+        <!-- Upcoming Appointments Alert -->
+        <div class="appointments">
+            <h3>📅 Upcoming Appointments</h3>
+            <div class="appointment-item">
+                <strong>March 9, 2026 - 8:30 AM</strong><br>
+                Radiographs (X-rays) for left hind leg
+            </div>
+            <div class="appointment-item">
+                <strong>March 9, 2026 - 3:00 PM</strong><br>
+                Ear infection recheck
+            </div>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="card">
+            <h2>Quick Actions</h2>
+            <div class="quick-actions">
+                <button class="btn success" onclick="logWalk()">🚶 Log Walk</button>
+                <button class="btn" onclick="logMeal()">🍖 Log Meal</button>
+                <button class="btn warning" onclick="logSymptom()">⚠️ Log Symptom</button>
+                <button class="btn danger" onclick="logMedication()">💊 Give Medication</button>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <!-- Daily Summary -->
+            <div class="card">
+                <h2>Today's Summary</h2>
+                <div id="todaySummary">
+                    <p>Walks: <strong id="walkCount">0</strong></p>
+                    <p>Meals: <strong id="mealCount">0</strong></p>
+                    <p>Medications Given: <strong id="medCount">0</strong></p>
+                    <p>Symptoms Reported: <strong id="symptomCount">0</strong></p>
+                </div>
+            </div>
+
+            <!-- Current Medications -->
+            <div class="card">
+                <h2>Current Medications</h2>
+                <ul class="medication-list">
+                    <li>
+                        <strong>Apoquel</strong><br>
+                        For: Ear inflammation & allergies<br>
+                        Dose: Twice daily (first 2 weeks)
+                    </li>
+                    <li>
+                        <strong>Duotic</strong><br>
+                        For: Right ear yeast infection<br>
+                        Next dose: At vet (~ Feb 9)
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Recent Activity Log -->
+            <div class="card">
+                <h2>Recent Activity</h2>
+                <div id="activityLog">
+                    <p style="color: #999;">No activities logged yet today</p>
+                </div>
+            </div>
+
+            <!-- Quick Forms -->
+            <div class="card">
+                <h2>Log Details</h2>
+                <div id="quickForm" style="display: none;">
+                    <!-- Forms will be inserted here dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="alertMessage"></div>
+
+    <script>
+        // Local storage keys
+        const STORAGE_KEY = 'baileyHealthData';
+        
+        // Get or initialize data
+        function getData() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : {
+                walks: [],
+                meals: [],
+                medications: [],
+                symptoms: []
+            };
+        }
+
+        // Save data
+        function saveData(data) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            updateSummary();
+            updateActivityLog();
+        }
+
+        // Show alert message
+        function showAlert(message, type = 'success') {
+            const alert = document.getElementById('alertMessage');
+            alert.textContent = message;
+            alert.style.background = type === 'success' ? '#48bb78' : '#e53e3e';
+            alert.style.display = 'block';
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 3000);
+        }
+
+        // Get today's date string
+        function getTodayString() {
+            return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
+        }
+
+        // Get current timestamp
+        function getTimestamp() {
+            return new Date().toLocaleString();
+        }
+
+        // Log walk
+        function logWalk() {
+            const formHtml = `
+                <h3>Log Walk</h3>
+                <input type="number" id="walkDuration" placeholder="Duration (minutes)" min="1" max="120">
+                <input type="number" id="walkDistance" placeholder="Distance (miles)" step="0.1" min="0.1" max="10">
+                <select id="walkEnergy">
+                    <option value="">Energy Level</option>
+                    <option value="1">1 - Very Low</option>
+                    <option value="2">2 - Low</option>
+                    <option value="3">3 - Normal</option>
+                    <option value="4">4 - High</option>
+                    <option value="5">5 - Very High</option>
+                </select>
+                <textarea id="walkNotes" placeholder="Notes (optional)"></textarea>
+                <button class="btn success" onclick="saveWalk()">Save Walk</button>
+            `;
+            document.getElementById('quickForm').innerHTML = formHtml;
+            document.getElementById('quickForm').style.display = 'block';
+        }
+
+        function saveWalk() {
+            const data = getData();
+            const walk = {
+                date: getTodayString(),
+                time: getTimestamp(),
+                duration: document.getElementById('walkDuration').value,
+                distance: document.getElementById('walkDistance').value,
+                energy: document.getElementById('walkEnergy').value,
+                notes: document.getElementById('walkNotes').value
+            };
+            
+            data.walks.push(walk);
+            saveData(data);
+            document.getElementById('quickForm').style.display = 'none';
+            showAlert('Walk logged successfully!');
+        }
+
+        // Log meal
+        function logMeal() {
+            const formHtml = `
+                <h3>Log Meal</h3>
+                <select id="mealType">
+                    <option value="breakfast">Breakfast</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack/Treat</option>
+                </select>
+                <select id="foodType">
+                    <option value="ollie">Ollie</option>
+                    <option value="kibble">Rachel Ray Kibble</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="treat">Treat</option>
+                </select>
+                <input type="text" id="mealAmount" placeholder="Amount (e.g., 1 cup)">
+                <select id="appetite">
+                    <option value="">Appetite</option>
+                    <option value="5">5 - Excellent</option>
+                    <option value="4">4 - Good</option>
+                    <option value="3">3 - Normal</option>
+                    <option value="2">2 - Poor</option>
+                    <option value="1">1 - Refused</option>
+                </select>
+                <button class="btn success" onclick="saveMeal()">Save Meal</button>
+            `;
+            document.getElementById('quickForm').innerHTML = formHtml;
+            document.getElementById('quickForm').style.display = 'block';
+        }
+
+        function saveMeal() {
+            const data = getData();
+            const meal = {
+                date: getTodayString(),
+                time: getTimestamp(),
+                type: document.getElementById('mealType').value,
+                food: document.getElementById('foodType').value,
+                amount: document.getElementById('mealAmount').value,
+                appetite: document.getElementById('appetite').value
+            };
+            
+            data.meals.push(meal);
+            saveData(data);
+            document.getElementById('quickForm').style.display = 'none';
+            showAlert('Meal logged successfully!');
+        }
+
+        // Log symptom
+        function logSymptom() {
+            const formHtml = `
+                <h3>Log Symptom</h3>
+                <select id="symptomType">
+                    <option value="ear_shaking">Ear Shaking</option>
+                    <option value="limping">Limping</option>
+                    <option value="scratching">Scratching</option>
+                    <option value="lethargy">Lethargy</option>
+                    <option value="vomiting">Vomiting</option>
+                    <option value="diarrhea">Diarrhea</option>
+                    <option value="other">Other</option>
+                </select>
+                <select id="affectedArea">
+                    <option value="">Affected Area</option>
+                    <option value="right_ear">Right Ear</option>
+                    <option value="left_ear">Left Ear</option>
+                    <option value="left_hind_leg">Left Hind Leg</option>
+                    <option value="right_hind_leg">Right Hind Leg</option>
+                    <option value="other">Other</option>
+                </select>
+                <select id="severity">
+                    <option value="">Severity (1-10)</option>
+                    <option value="1">1 - Barely noticeable</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5 - Moderate</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10 - Severe</option>
+                </select>
+                <textarea id="symptomNotes" placeholder="Description and notes"></textarea>
+                <button class="btn warning" onclick="saveSymptom()">Save Symptom</button>
+            `;
+            document.getElementById('quickForm').innerHTML = formHtml;
+            document.getElementById('quickForm').style.display = 'block';
+        }
+
+        function saveSymptom() {
+            const data = getData();
+            const symptom = {
+                date: getTodayString(),
+                time: getTimestamp(),
+                type: document.getElementById('symptomType').value,
+                area: document.getElementById('affectedArea').value,
+                severity: document.getElementById('severity').value,
+                notes: document.getElementById('symptomNotes').value
+            };
+            
+            data.symptoms.push(symptom);
+            saveData(data);
+            document.getElementById('quickForm').style.display = 'none';
+            showAlert('Symptom logged successfully!');
+        }
+
+        // Log medication
+        function logMedication() {
+            const formHtml = `
+                <h3>Log Medication</h3>
+                <select id="medName">
+                    <option value="apoquel">Apoquel</option>
+                    <option value="pain_med">Pain Medication</option>
+                    <option value="other">Other</option>
+                </select>
+                <select id="medGiven">
+                    <option value="true">Given</option>
+                    <option value="false">Skipped</option>
+                </select>
+                <textarea id="medNotes" placeholder="Notes (side effects, reactions, etc.)"></textarea>
+                <button class="btn danger" onclick="saveMedication()">Save Medication</button>
+            `;
+            document.getElementById('quickForm').innerHTML = formHtml;
+            document.getElementById('quickForm').style.display = 'block';
+        }
+
+        function saveMedication() {
+            const data = getData();
+            const medication = {
+                date: getTodayString(),
+                time: getTimestamp(),
+                name: document.getElementById('medName').value,
+                given: document.getElementById('medGiven').value === 'true',
+                notes: document.getElementById('medNotes').value
+            };
+            
+            data.medications.push(medication);
+            saveData(data);
+            document.getElementById('quickForm').style.display = 'none';
+            showAlert('Medication logged successfully!');
+        }
+
+        // Update today's summary
+        function updateSummary() {
+            const data = getData();
+            const today = getTodayString();
+            
+            const todayWalks = data.walks.filter(w => w.date === today);
+            const todayMeals = data.meals.filter(m => m.date === today);
+            const todayMeds = data.medications.filter(m => m.date === today && m.given);
+            const todaySymptoms = data.symptoms.filter(s => s.date === today);
+            
+            document.getElementById('walkCount').textContent = todayWalks.length;
+            document.getElementById('mealCount').textContent = todayMeals.length;
+            document.getElementById('medCount').textContent = todayMeds.length;
+            document.getElementById('symptomCount').textContent = todaySymptoms.length;
+        }
+
+        // Update activity log
+        function updateActivityLog() {
+            const data = getData();
+            const today = getTodayString();
+            
+            // Combine all activities
+            const activities = [];
+            
+            data.walks.filter(w => w.date === today).forEach(w => {
+                activities.push({
+                    time: new Date(w.time),
+                    type: 'walk',
+                    html: `<div class="log-entry">
+                        <strong>🚶 Walk</strong> - ${w.duration || '?'} min, ${w.distance || '?'} miles
+                        ${w.notes ? `<br><em>${w.notes}</em>` : ''}
+                        <div class="timestamp">${w.time}</div>
+                    </div>`
+                });
+            });
+            
+            data.meals.filter(m => m.date === today).forEach(m => {
+                activities.push({
+                    time: new Date(m.time),
+                    type: 'meal',
+                    html: `<div class="log-entry">
+                        <strong>🍖 ${m.type}</strong> - ${m.food}, ${m.amount || '?'}
+                        <div class="timestamp">${m.time}</div>
+                    </div>`
+                });
+            });
+            
+            data.symptoms.filter(s => s.date === today).forEach(s => {
+                const severityClass = s.severity <= 3 ? 'low' : s.severity <= 6 ? 'medium' : 'high';
+                activities.push({
+                    time: new Date(s.time),
+                    type: 'symptom',
+                    html: `<div class="log-entry">
+                        <strong>⚠️ ${s.type.replace('_', ' ')}</strong> 
+                        <span class="severity ${severityClass}">Severity: ${s.severity || '?'}</span>
+                        ${s.notes ? `<br><em>${s.notes}</em>` : ''}
+                        <div class="timestamp">${s.time}</div>
+                    </div>`
+                });
+            });
+            
+            data.medications.filter(m => m.date === today).forEach(m => {
+                activities.push({
+                    time: new Date(m.time),
+                    type: 'medication',
+                    html: `<div class="log-entry">
+                        <strong>💊 ${m.name}</strong> - ${m.given ? 'Given' : 'Skipped'}
+                        ${m.notes ? `<br><em>${m.notes}</em>` : ''}
+                        <div class="timestamp">${m.time}</div>
+                    </div>`
+                });
+            });
+            
+            // Sort by time (most recent first)
+            activities.sort((a, b) => b.time - a.time);
+            
+            // Update the log
+            const logDiv = document.getElementById('activityLog');
+            if (activities.length === 0) {
+                logDiv.innerHTML = '<p style="color: #999;">No activities logged yet today</p>';
+            } else {
+                logDiv.innerHTML = activities.map(a => a.html).join('');
+            }
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            updateSummary();
+            updateActivityLog();
+        };
+    </script>
+</body>
+</html>

@@ -1,220 +1,258 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from 'react';
-
-export const dynamic = 'force-dynamic';
-import { supabase, type HealthRecord } from '@/lib/supabase';
-import { Plus, Heart, Syringe, Pill, Scale } from 'lucide-react';
+import { supabase, VetRecord, Medication, WeightLog } from '../../lib/supabase';
+import { Pill, Calendar, AlertCircle, FileText, Plus, DollarSign, Scale, Syringe, Stethoscope } from 'lucide-react';
 import { format } from 'date-fns';
 
-const RECORD_TYPES = [
-  { value: 'vet_visit', label: 'Vet Visit', icon: Heart, color: 'bg-pink-500' },
-  { value: 'vaccination', label: 'Vaccination', icon: Syringe, color: 'bg-blue-500' },
-  { value: 'medication', label: 'Medication', icon: Pill, color: 'bg-purple-500' },
-  { value: 'weight', label: 'Weight Check', icon: Scale, color: 'bg-green-500' },
-];
-
-type RecordType = 'vet_visit' | 'vaccination' | 'medication' | 'weight';
-
 export default function HealthPage() {
-  const [records, setRecords] = useState<HealthRecord[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<{
-    type: RecordType;
-    date: string;
-    title: string;
-    description: string;
-    value: string;
-  }>({
-    type: 'vet_visit',
-    date: new Date().toISOString().split('T')[0],
-    title: '',
-    description: '',
-    value: '',
-  });
+  const [vetRecords, setVetRecords] = useState<VetRecord[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'meds' | 'history'>('overview');
 
   useEffect(() => {
-    loadRecords();
+    async function fetchData() {
+      try {
+        const [vetRes, medsRes, weightRes] = await Promise.all([
+          supabase
+            .from('bailey_vet_records')
+            .select('*')
+            .order('date', { ascending: false }),
+          supabase
+            .from('bailey_medications')
+            .select('*')
+            .eq('active', true)
+            .order('start_date', { ascending: false }),
+          supabase
+            .from('bailey_weight_logs')
+            .select('*')
+            .order('date', { ascending: false })
+            .limit(5)
+        ]);
+
+        if (vetRes.data) setVetRecords(vetRes.data);
+        if (medsRes.data) setMedications(medsRes.data);
+        if (weightRes.data) setWeightLogs(weightRes.data);
+      } catch (error) {
+        console.error('Error fetching health data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
   }, []);
 
-  async function loadRecords() {
-    const { data } = await supabase
-      .from('bailey_health')
-      .select('*')
-      .order('date', { ascending: false });
-    setRecords(data || []);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    await supabase.from('bailey_health').insert([formData]);
-    setFormData({
-      type: 'vet_visit',
-      date: new Date().toISOString().split('T')[0],
-      title: '',
-      description: '',
-      value: '',
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
-    setShowForm(false);
-    loadRecords();
-  }
+  };
 
-  const upcomingRecords = records.filter(
-    (r) => new Date(r.date) > new Date()
-  );
-  const pastRecords = records.filter(
-    (r) => new Date(r.date) <= new Date()
-  );
+  const getRecordIcon = (type: string) => {
+    switch (type) {
+      case 'vaccine': return <Syringe className="w-5 h-5 text-blue-500" />;
+      case 'medication': return <Pill className="w-5 h-5 text-purple-500" />;
+      case 'visit': return <Stethoscope className="w-5 h-5 text-pink-500" />;
+      case 'surgery': return <AlertCircle className="w-5 h-5 text-red-500" />;
+      default: return <FileText className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_lbs : null;
+  const weightTrend = weightLogs.length >= 2 
+    ? (weightLogs[0].weight_lbs - weightLogs[1].weight_lbs).toFixed(1)
+    : null;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-4xl font-bold text-[var(--primary)]">💊 Health Records</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-[var(--primary)] text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-[var(--primary-dark)] transition-colors shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          Add Record
-        </button>
-      </div>
-
-      {/* Add Record Form */}
-      {showForm && (
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 animate-bounce-in">
-          <h2 className="text-2xl font-bold mb-4 text-[var(--primary)]">New Health Record</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Type</label>
-              <select
-                value={formData.type}
-                onChange={(e) =>
-                  setFormData({ ...formData, type: e.target.value as RecordType })
-                }
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-              >
-                {RECORD_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Date</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Title</label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                required
-                placeholder="e.g., Annual Checkup, Rabies Vaccine"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Description (optional)</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                rows={3}
-                placeholder="Additional details"
-              />
-            </div>
-            {formData.type === 'weight' && (
-              <div>
-                <label className="block text-sm font-medium mb-2">Weight</label>
-                <input
-                  type="text"
-                  value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  placeholder="e.g., 52 lbs"
-                />
-              </div>
-            )}
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="flex-1 bg-[var(--primary)] text-white px-6 py-3 rounded-lg hover:bg-[var(--primary-dark)] transition-colors"
-              >
-                Save Record
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Upcoming */}
-      {upcomingRecords.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-[var(--primary)] mb-4">📅 Upcoming</h2>
-          <div className="space-y-3">
-            {upcomingRecords.map((record) => (
-              <RecordCard key={record.id} record={record} />
-            ))}
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <header className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Health Dashboard</h1>
+            <p className="text-gray-500 mt-1"> comprehensive view of Bailey's wellness</p>
           </div>
-        </div>
-      )}
+          <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm">
+            <Plus className="w-4 h-4" />
+            Add Entry
+          </button>
+        </header>
 
-      {/* History */}
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--primary)] mb-4">📋 History</h2>
-        <div className="space-y-3">
-          {pastRecords.map((record) => (
-            <RecordCard key={record.id} record={record} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RecordCard({ record }: { record: HealthRecord }) {
-  const typeInfo = RECORD_TYPES.find((t) => t.value === record.type);
-  const Icon = typeInfo?.icon || Heart;
-
-  return (
-    <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 ${typeInfo?.color} rounded-full flex items-center justify-center text-white`}>
-          <Icon className="w-6 h-6" />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-start justify-between mb-2">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+            <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
+              <Scale className="w-6 h-6" />
+            </div>
             <div>
-              <h3 className="font-semibold text-lg">{record.title}</h3>
-              <p className="text-sm text-[var(--text-light)]">
-                {format(new Date(record.date), 'MMMM d, yyyy')}
+              <p className="text-sm text-gray-500 font-medium">Current Weight</p>
+              <p className="text-2xl font-bold text-gray-900">{latestWeight ? `${latestWeight} lbs` : '--'}</p>
+              {weightTrend && (
+                <p className={`text-xs font-medium ${Number(weightTrend) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {Number(weightTrend) > 0 ? '+' : ''}{weightTrend} lbs since last check
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+            <div className="p-3 bg-purple-50 rounded-lg text-purple-600">
+              <Pill className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Active Meds</p>
+              <p className="text-2xl font-bold text-gray-900">{medications.length}</p>
+              <p className="text-xs text-gray-400">Daily treatments</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+            <div className="p-3 bg-pink-50 rounded-lg text-pink-600">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Next Visit</p>
+              <p className="text-lg font-bold text-gray-900 truncate">
+                {vetRecords.find(r => r.next_due_date && new Date(r.next_due_date) > new Date())?.next_due_date 
+                  ? formatDate(vetRecords.find(r => r.next_due_date && new Date(r.next_due_date) > new Date())!.next_due_date!)
+                  : 'None scheduled'}
               </p>
             </div>
-            {record.value && (
-              <div className="bg-[var(--accent)] px-3 py-1 rounded-full text-sm font-medium">
-                {record.value}
-              </div>
-            )}
           </div>
-          {record.description && (
-            <p className="text-[var(--text-light)] mt-2">{record.description}</p>
-          )}
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-4 border-b border-gray-200 mb-6">
+          <button 
+            onClick={() => setActiveTab('overview')}
+            className={`pb-3 px-1 font-medium text-sm transition-colors ${activeTab === 'overview' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Overview
+          </button>
+          <button 
+            onClick={() => setActiveTab('meds')}
+            className={`pb-3 px-1 font-medium text-sm transition-colors ${activeTab === 'meds' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Medications
+          </button>
+          <button 
+            onClick={() => setActiveTab('history')}
+            className={`pb-3 px-1 font-medium text-sm transition-colors ${activeTab === 'history' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Vet History
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
+          <div className="space-y-8">
+            <section>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-800">Recent Activity</h2>
+                <button onClick={() => setActiveTab('history')} className="text-indigo-600 text-sm hover:underline">View All</button>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                {loading ? (
+                  <div className="p-4 animate-pulse space-y-3">
+                    <div className="h-6 bg-gray-100 w-3/4 rounded"></div>
+                    <div className="h-6 bg-gray-100 w-1/2 rounded"></div>
+                  </div>
+                ) : vetRecords.length > 0 ? (
+                  <div className="divide-y divide-gray-100">
+                    {vetRecords.slice(0, 3).map(record => (
+                      <div key={record.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
+                        <div className="p-2 bg-gray-50 rounded-lg">
+                          {getRecordIcon(record.type)}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{record.title}</h3>
+                          <p className="text-sm text-gray-500">{formatDate(record.date)} • {record.vet_name || 'Unknown'}</p>
+                        </div>
+                        {record.cost && (
+                          <span className="text-sm font-medium text-gray-600">${record.cost}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-gray-500">No recent records.</div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === 'meds' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {medications.map(med => (
+              <div key={med.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-bold text-lg text-gray-900">{med.name}</h3>
+                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">Active</span>
+                </div>
+                <div className="space-y-2 text-sm text-gray-600 mt-3">
+                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                    <span className="font-medium">Dosage</span>
+                    <span>{med.dosage}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                    <span className="font-medium">Frequency</span>
+                    <span>{med.frequency}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Started</span>
+                    <span>{formatDate(med.start_date)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            {vetRecords.map(record => (
+              <div key={record.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    {getRecordIcon(record.type)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-gray-900">{record.title}</h3>
+                        <p className="text-sm text-gray-500 mt-1">{formatDate(record.date)} • {record.vet_name || 'Unknown Clinic'}</p>
+                      </div>
+                      {record.cost && (
+                        <span className="text-sm font-medium text-gray-600 flex items-center">
+                          <DollarSign className="w-3 h-3" />
+                          {record.cost}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {record.description && (
+                      <p className="mt-2 text-gray-600 text-sm leading-relaxed">
+                        {record.description}
+                      </p>
+                    )}
+
+                    {record.next_due_date && (
+                      <div className="mt-3 inline-flex items-center gap-2 text-sm text-orange-700 bg-orange-50 px-3 py-1.5 rounded-md border border-orange-100">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="font-medium">Due: {formatDate(record.next_due_date)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,63 +1,68 @@
-# 🐕 Bailey Dashboard
+# Bailey Health Dashboard 🐕
 
-A delightful, complete web dashboard for tracking everything about Bailey - the goodest girl!
+A dedicated health tracking dashboard for Bailey, Jake's 5-year-old dog, to monitor her health, medications, vet appointments, and daily activities.
 
-## Features
+## Bailey's Profile
+- **Name:** Bailey
+- **Age:** 5 years old
+- **Weight:** ~50 lbs (24.9 kg)
+- **Diet:** Mix of Ollie subscription food and Rachel Ray dry kibble
 
-### 🏠 Home Dashboard
-- Hero section with Bailey's photo
-- Quick stats cards (age, walks this month, days since vet visit, favorite activity)
-- Fun facts about Bailey
-- Recent photos gallery
+## Known Health Issues
+1. **Recurring ear infections** (right ear, yeast infections)
+   - Typically annual occurrence
+   - Currently on Duotic treatment
+   - Apoquel prescribed for inflammation/allergies
 
-### 🚶 Walk Tracker
-- Log walks (date, duration, location, notes)
-- View walk history
-- Track streaks and totals
-- See average duration and total time
+2. **Left hind leg lameness**
+   - Intermittent limping, not constant
+   - Possible cruciate ligament issue
+   - X-rays scheduled for follow-up
 
-### 💊 Health Records
-- Track vet appointments (upcoming + history)
-- Record vaccinations
-- Medication logs
-- Weight tracking
-- Medical notes and descriptions
+## Upcoming Appointments
+- **March 9th, 2026 - 8:30 AM** - Radiographs (X-rays) for leg examination
+- **March 9th, 2026 - 3:00 PM** - Ear infection recheck
 
-### 📸 Photo Gallery
-- Beautiful grid layout
-- Upload new photos (via URL)
-- Add captions and dates
-- Mark favorites
-- Lightbox view
+## What This Dashboard Tracks
 
-### ✨ Fun Stuff
-- Bailey quotes and sayings
-- Favorite toys
-- Funny moments and memories
-- Birthday countdown
+### 1. Daily Activities
+- **Walks** - Duration, distance, notes about behavior
+- **Meals** - Time, type (Ollie/kibble), amount, appetite notes
+- **Bathroom** - Frequency, any issues noted
+- **Play/Exercise** - Type, duration, energy level
 
-## Tech Stack
+### 2. Health Monitoring
+- **Symptoms** - Ear shaking, limping, general behavior changes
+- **Medications** - Doses given, reactions, effectiveness
+- **Vet Visits** - Date, purpose, findings, follow-up needed
+- **Weight Tracking** - Monthly weigh-ins
 
-- **Next.js 15** - React framework with App Router
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **Supabase** - Database and backend
-- **date-fns** - Date utilities
-- **lucide-react** - Beautiful icons
+### 3. Medication Schedule
+- **Apoquel** - For ear inflammation/allergies
+  - Initial: Twice daily for 2 weeks
+  - Maintenance: Once daily for 2 weeks
+  - Then as needed based on symptoms
+- **Pain medication** - For leg (as prescribed)
+- **Ear medication** - Duotic (applied at vet)
 
-## Design
+### 4. Quick Log Features
+- One-tap logging for common activities
+- Symptom severity sliders (1-10)
+- Photo uploads for visual tracking
+- Voice notes for detailed observations
 
-- 🎨 **Dog-themed color palette**: Warm tans, browns, and creams
-- 📱 **Mobile-first**: Fully responsive with bottom navigation on mobile
-- ✨ **Delightful animations**: Bounce-in effects, smooth transitions
-- 🐾 **Photo-forward**: Bailey is the star
+## Database Schema
 
-## Setup
+```sql
+-- Core tables for Bailey's health tracking
+-- See bailey-schema.sql for full implementation
+```
 
-1. **Clone the repository**
+## Setup Instructions
+
+1. **Clone the dashboard**
    ```bash
-   git clone <repository-url>
-   cd bailey-dashboard
+   cd /Users/jack/.openclaw/workspace/bailey-dashboard
    ```
 
 2. **Install dependencies**
@@ -65,91 +70,50 @@ A delightful, complete web dashboard for tracking everything about Bailey - the 
    npm install
    ```
 
-3. **Set up Supabase**
-   - Create a Supabase project (or use existing LifeOS project)
-   - Run the SQL schema from `supabase-schema.sql` in your Supabase SQL editor
-   - Copy your Supabase URL and anon key
+3. **Set up database**
+   - Apply schema from `bailey-schema.sql` to Supabase
+   - Configure environment variables
 
-4. **Configure environment variables**
-   - Copy `.env.local` and add your Supabase credentials:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-5. **Run the development server**
+4. **Run locally**
    ```bash
    npm run dev
    ```
 
-6. **Open [http://localhost:3000](http://localhost:3000)**
+## Quick Start Guide
 
-## Database Schema
+### Daily Logging
+1. Open dashboard at http://localhost:3000
+2. Click "Quick Log" for fast entries
+3. Use forms for detailed tracking
 
-The app uses four main tables:
-- `bailey_walks` - Walk logs
-- `bailey_health` - Health records
-- `bailey_photos` - Photo gallery
-- `bailey_memories` - Fun quotes, toys, and moments
+### Viewing History
+- Click any stat tile to see full history
+- Use calendar view for appointments
+- Check medication adherence reports
 
-See `supabase-schema.sql` for the complete schema with sample data.
+### Emergency Info
+- Vet: [Add vet contact info]
+- Emergency clinic: [Add emergency vet info]
+- Medication allergies: None known
 
-## Deployment
+## Features
 
-### Vercel (Recommended)
+✅ **Health-focused tracking** - Specific to Bailey's needs
+✅ **Medication reminders** - Never miss a dose
+✅ **Symptom tracking** - Monitor patterns over time
+✅ **Vet appointment calendar** - Stay on top of checkups
+✅ **Photo timeline** - Visual health progress
+✅ **Emergency info** - Quick access when needed
+✅ **Export reports** - For vet visits
 
-1. **Push to GitHub**
-   ```bash
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/yourusername/bailey-dashboard.git
-   git push -u origin main
-   ```
+## Mobile Access
+- Responsive design works on all devices
+- Add to home screen for app-like experience
+- Offline support for critical info
 
-2. **Deploy to Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Import your GitHub repository
-   - Add environment variables (Supabase URL and key)
-   - Deploy!
-
-3. **Custom Domain**
-   - In Vercel project settings, go to Domains
-   - Add `bailey.nsprd.com`
-   - Update your DNS settings as instructed
-
-## Usage
-
-### Adding Photos
-Photos are added via URL. Upload to an image host (Imgur, Cloudinary, etc.) and paste the URL.
-
-### Tracking Walks
-Log each walk with date, duration, location, and optional notes. The app automatically calculates streaks and totals.
-
-### Health Records
-Keep track of all vet visits, vaccinations, medications, and weight checks in one place.
-
-### Memories
-Capture Bailey's personality with quotes, favorite toys, and funny moments.
-
-## Color Palette
-
-```css
---primary: #d4a373 (warm tan)
---primary-dark: #b8885c
---secondary: #8b7355 (brown)
---accent: #f4e4d7 (cream)
---success: #7fb069 (grass green)
---background: #faf8f5 (off-white)
-```
-
-## Contributing
-
-This is a personal project for Bailey, but feel free to use it as inspiration for your own pet dashboard!
-
-## License
-
-MIT
+## Integration with Personal Dashboard
+This can work standalone or integrate with Jake's personal dashboard for unified tracking.
 
 ---
 
-Made with ❤️ for Bailey, the goodest girl 🐕
+Made with ❤️ for Bailey's health and happiness
