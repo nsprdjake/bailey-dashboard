@@ -50,15 +50,45 @@ export async function POST(request: NextRequest) {
     if (loginData.error) throw new Error(`Fi login error: ${loginData.error.message}`);
 
     // Extract fi.sid cookie from set-cookie headers
-    // getSetCookie() returns an array of cookie strings
-    const rawCookies = loginRes.headers.getSetCookie?.() || [];
-    // Fallback: try get('set-cookie') which may concatenate them
-    const fallbackCookie = loginRes.headers.get('set-cookie') || '';
-    const allCookies = rawCookies.length > 0 ? rawCookies : [fallbackCookie];
+    // Try multiple approaches since different runtimes handle this differently
+    let cookieHeader = '';
     
-    // Build cookie header string from all set-cookie values
-    const cookieParts = allCookies.map(c => c.split(';')[0]).filter(Boolean);
-    const cookieHeader = cookieParts.join('; ');
+    // Approach 1: getSetCookie() (Node 20+)
+    const rawCookies = loginRes.headers.getSetCookie?.() || [];
+    if (rawCookies.length > 0) {
+      cookieHeader = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
+    }
+    
+    // Approach 2: Iterate headers entries looking for set-cookie
+    if (!cookieHeader) {
+      const setCookies: string[] = [];
+      loginRes.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === 'set-cookie') {
+          setCookies.push(value.split(';')[0]);
+        }
+      });
+      if (setCookies.length > 0) cookieHeader = setCookies.join('; ');
+    }
+
+    // Approach 3: raw get (may concatenate with comma)
+    if (!cookieHeader) {
+      const raw = loginRes.headers.get('set-cookie') || '';
+      // Split on comma but be careful about expires dates
+      const parts = raw.split(/,(?=\s*\w+=)/).map(c => c.split(';')[0].trim()).filter(Boolean);
+      cookieHeader = parts.join('; ');
+    }
+
+    // If we still have nothing, the GraphQL calls will fail with Unauthorized
+    if (!cookieHeader) {
+      return NextResponse.json({ 
+        error: 'Failed to extract session cookie from Fi login',
+        debug: { 
+          rawCookieCount: rawCookies.length,
+          headerKeys: Array.from(loginRes.headers.keys()),
+          setCookieRaw: loginRes.headers.get('set-cookie')?.substring(0, 100) || null,
+        }
+      }, { status: 500 });
+    }
 
     // Step 2: Get pet activity stats
     const statsQuery = `query { pet (id: "${BAILEY_PET_ID}") { dailyStat: currentActivitySummary (period: DAILY) { ...ActivitySummaryDetails } weeklyStat: currentActivitySummary (period: WEEKLY) { ...ActivitySummaryDetails } } }` + FRAGMENTS;
