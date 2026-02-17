@@ -111,18 +111,23 @@ export default function ActivityPage() {
       const result = await response.json();
       
       if (result.success && result.data) {
-        // Update local state with Fi data
         const fiData = result.data;
         setActivities([{
+          id: 'fi-live',
           date: new Date().toISOString().split('T')[0],
-          steps: fiData.steps,
-          distance_miles: fiData.distance,
-          daily_goal: fiData.dailyGoal,
-          goal_percentage: fiData.goalPercent,
-          activity_type: fiData.activityType,
-          location: fiData.location,
-          synced_from_fi: true,
-        }]);
+          total_steps: fiData.steps,
+          total_distance_meters: fiData.distance,
+          total_calories: 0,
+          walk_count: 0,
+          rest_minutes: 0,
+          nap_minutes: 0,
+          active_minutes: 0,
+          play_minutes: 0,
+          daily_goal_steps: fiData.dailyGoal,
+          goal_achieved: fiData.goalPercent >= 100,
+          synced_at: fiData.lastSync,
+          created_at: fiData.lastSync,
+        } as FiActivity]);
       }
 
       setSyncStatus({
