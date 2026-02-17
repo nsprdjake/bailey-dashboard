@@ -38,9 +38,10 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ email: fiEmail, password: fiPassword }),
+      redirect: 'manual',
     });
 
-    if (!loginRes.ok) {
+    if (!loginRes.ok && loginRes.status !== 302) {
       const text = await loginRes.text();
       throw new Error(`Fi login failed (${loginRes.status}): ${text}`);
     }
@@ -48,10 +49,16 @@ export async function POST(request: NextRequest) {
     const loginData = await loginRes.json();
     if (loginData.error) throw new Error(`Fi login error: ${loginData.error.message}`);
 
-    // Extract session cookie
-    const cookies = loginRes.headers.getSetCookie?.() || [];
-    const cookieHeader = cookies.join('; ');
-    const sessionId = loginData.sessionId;
+    // Extract fi.sid cookie from set-cookie headers
+    // getSetCookie() returns an array of cookie strings
+    const rawCookies = loginRes.headers.getSetCookie?.() || [];
+    // Fallback: try get('set-cookie') which may concatenate them
+    const fallbackCookie = loginRes.headers.get('set-cookie') || '';
+    const allCookies = rawCookies.length > 0 ? rawCookies : [fallbackCookie];
+    
+    // Build cookie header string from all set-cookie values
+    const cookieParts = allCookies.map(c => c.split(';')[0]).filter(Boolean);
+    const cookieHeader = cookieParts.join('; ');
 
     // Step 2: Get pet activity stats
     const statsQuery = `query { pet (id: "${BAILEY_PET_ID}") { dailyStat: currentActivitySummary (period: DAILY) { ...ActivitySummaryDetails } weeklyStat: currentActivitySummary (period: WEEKLY) { ...ActivitySummaryDetails } } }` + FRAGMENTS;
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Cookie': cookieHeader,
-        'sessionId': sessionId,
+        
       },
     });
     const statsData = await statsRes.json();
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Cookie': cookieHeader,
-        'sessionId': sessionId,
+        
       },
     });
     const locData = await locRes.json();
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Cookie': cookieHeader,
-        'sessionId': sessionId,
+        
       },
     });
     const restData = await restRes.json();
@@ -100,7 +107,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Cookie': cookieHeader,
-        'sessionId': sessionId,
+        
       },
     });
     const deviceData = await deviceRes.json();
