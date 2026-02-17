@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Fi uses a GraphQL API
-const FI_GRAPHQL_URL = 'https://api.tryfi.com/graphql';
+const FI_BASE = 'https://api.tryfi.com';
+const BAILEY_PET_ID = '5dnzqk6ykXz7kDTkOFjYKw';
 
-async function fiGraphQL(query: string, variables: Record<string, any> = {}, sessionId?: string) {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (sessionId) {
-    headers['Authorization'] = `Bearer ${sessionId}`;
-    headers['cookie'] = `sessionId=${sessionId}`;
-  }
-  const res = await fetch(FI_GRAPHQL_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`Fi API error: ${res.status}`);
-  const json = await res.json();
-  if (json.errors) throw new Error(json.errors[0]?.message || 'GraphQL error');
-  return json.data;
-}
+// GraphQL fragments from pytryfi
+const FRAGMENTS = `
+fragment PositionCoordinates on Position { __typename latitude longitude }
+fragment UserDetails on User { __typename id email firstName lastName }
+fragment UncertaintyInfoDetails on UncertaintyInfo { __typename areaName updatedAt circle { __typename ...CircleDetails } }
+fragment CircleDetails on Circle { __typename radius latitude longitude }
+fragment LocationPoint on Location { __typename date errorRadius position { __typename ...PositionCoordinates } }
+fragment PlaceDetails on Place { __typename id name address position { __typename ...PositionCoordinates } radius }
+fragment OngoingActivityDetails on OngoingActivity { __typename start presentUser { __typename ...UserDetails } areaName lastReportTimestamp totalSteps uncertaintyInfo { __typename ...UncertaintyInfoDetails } ... on OngoingWalk { distance positions { __typename ...LocationPoint } path { __typename ...PositionCoordinates } } ... on OngoingRest { position { __typename ...PositionCoordinates } place { __typename ...PlaceDetails } } }
+fragment ActivitySummaryDetails on ActivitySummary { __typename start end totalSteps stepGoal dailySteps { __typename date totalSteps stepGoal } totalDistance }
+fragment RestSummaryDetails on RestSummary { __typename start end data { __typename ... on ConcreteRestSummaryData { sleepAmounts { __typename type duration } } } }
+fragment BreedDetails on Breed { __typename id name }
+fragment PhotoDetails on Photo { __typename id image { __typename fullSize } }
+fragment LedColorDetails on LedColor { __typename ledColorCode hexCode name }
+fragment ConnectionStateDetails on ConnectionState { __typename date ... on ConnectedToUser { user { __typename ...UserDetails } } ... on ConnectedToBase { chargingBase { __typename id } } ... on ConnectedToCellular { signalStrengthPercent } }
+fragment OperationParamsDetails on OperationParams { __typename mode ledEnabled }
+fragment DeviceDetails on Device { __typename id moduleId hasActiveSubscription lastConnectionState { __typename ...ConnectionStateDetails } ledColor { __typename ...LedColorDetails } operationParams { __typename ...OperationParamsDetails } }
+fragment BasePetProfile on BasePet { __typename id name gender weight breed { __typename ...BreedDetails } photos { __typename first { __typename ...PhotoDetails } } }
+fragment PetProfile on Pet { __typename ...BasePetProfile device { __typename ...DeviceDetails } }
+`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,95 +33,134 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Fi credentials not configured' }, { status: 500 });
     }
 
-    // Step 1: Authenticate
-    const authQuery = `
-      mutation signIn($input: SignInInput!) {
-        signIn(input: $input) {
-          user { id }
-          session { token }
-          error { message }
-        }
-      }
-    `;
-    const authData = await fiGraphQL(authQuery, {
-      input: { email: fiEmail, password: fiPassword }
+    // Step 1: Login via /auth/login (form POST, like pytryfi does)
+    const loginRes = await fetch(`${FI_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email: fiEmail, password: fiPassword }),
     });
 
-    const session = authData?.signIn?.session;
-    const authError = authData?.signIn?.error;
-    if (authError) throw new Error(`Fi auth: ${authError.message}`);
-    if (!session?.token) throw new Error('No session token from Fi');
-    const token = session.token;
-
-    // Step 2: Get current user + pet data
-    const petQuery = `
-      {
-        currentUser {
-          userHouseholds {
-            household {
-              pets {
-                id
-                name
-                breed { name }
-                gender
-                weight
-                photos { first { image { fullSize } } }
-                dailyGoal
-                currentActivitySummary {
-                  steps
-                  totalDistance
-                  totalActivityDuration
-                }
-                device {
-                  batteryPercent
-                  lastHeardFromDevice
-                }
-                ongoingActivity {
-                  presentUser { id }
-                  start
-                  areaName
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
-    const petData = await fiGraphQL(petQuery, {}, token);
-
-    // Find Bailey
-    const households = petData?.currentUser?.userHouseholds || [];
-    let bailey: any = null;
-    for (const uh of households) {
-      const pets = uh?.household?.pets || [];
-      for (const pet of pets) {
-        if (pet.name?.toLowerCase() === 'bailey') {
-          bailey = pet;
-          break;
-        }
-      }
-      if (bailey) break;
+    if (!loginRes.ok) {
+      const text = await loginRes.text();
+      throw new Error(`Fi login failed (${loginRes.status}): ${text}`);
     }
 
-    if (!bailey) {
-      return NextResponse.json({ error: 'Bailey not found in Fi account' }, { status: 404 });
+    const loginData = await loginRes.json();
+    if (loginData.error) throw new Error(`Fi login error: ${loginData.error.message}`);
+
+    // Extract session cookie
+    const cookies = loginRes.headers.getSetCookie?.() || [];
+    const cookieHeader = cookies.join('; ');
+    const sessionId = loginData.sessionId;
+
+    // Step 2: Get pet activity stats
+    const statsQuery = `query { pet (id: "${BAILEY_PET_ID}") { dailyStat: currentActivitySummary (period: DAILY) { ...ActivitySummaryDetails } weeklyStat: currentActivitySummary (period: WEEKLY) { ...ActivitySummaryDetails } } }` + FRAGMENTS;
+
+    const statsRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(statsQuery)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader,
+        'sessionId': sessionId,
+      },
+    });
+    const statsData = await statsRes.json();
+
+    // Step 3: Get location
+    const locQuery = `query { pet (id: "${BAILEY_PET_ID}") { ongoingActivity { __typename ...OngoingActivityDetails } } }` + FRAGMENTS;
+
+    const locRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(locQuery)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader,
+        'sessionId': sessionId,
+      },
+    });
+    const locData = await locRes.json();
+
+    // Step 4: Get rest/sleep stats
+    const restQuery = `query { pet (id: "${BAILEY_PET_ID}") { dailyStat: restSummaryFeed(cursor: null, period: DAILY, limit: 1) { __typename restSummaries { __typename ...RestSummaryDetails } } } }` + FRAGMENTS;
+
+    const restRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(restQuery)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader,
+        'sessionId': sessionId,
+      },
+    });
+    const restData = await restRes.json();
+
+    // Step 5: Get device details
+    const deviceQuery = `query { pet (id: "${BAILEY_PET_ID}") { __typename ...PetProfile } }` + FRAGMENTS;
+
+    const deviceRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(deviceQuery)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader,
+        'sessionId': sessionId,
+      },
+    });
+    const deviceData = await deviceRes.json();
+
+    // Parse results
+    const daily = statsData?.data?.pet?.dailyStat || {};
+    const weekly = statsData?.data?.pet?.weeklyStat || {};
+    const activity = locData?.data?.pet?.ongoingActivity || {};
+    const restSummaries = restData?.data?.pet?.dailyStat?.restSummaries || [];
+    const pet = deviceData?.data?.pet || {};
+    const device = pet.device || {};
+    const connection = device.lastConnectionState || {};
+
+    // Build location info
+    let location = activity.areaName || 'Unknown';
+    let lat = null, lng = null;
+    if (activity.__typename === 'OngoingRest' && activity.position) {
+      lat = activity.position.latitude;
+      lng = activity.position.longitude;
+    }
+    if (activity.place) {
+      location = activity.place.name || activity.place.address || location;
     }
 
-    const activity = bailey.currentActivitySummary || {};
-    const device = bailey.device || {};
+    // Build sleep data
+    let sleepData = null;
+    if (restSummaries.length > 0) {
+      const rest = restSummaries[0];
+      sleepData = {
+        start: rest.start,
+        end: rest.end,
+        amounts: rest.data?.sleepAmounts || [],
+      };
+    }
 
     const result = {
       success: true,
       data: {
-        name: bailey.name,
-        breed: bailey.breed?.name || 'Unknown',
-        steps: activity.steps || 0,
-        distance: activity.totalDistance || 0,
-        activityMinutes: activity.totalActivityDuration || 0,
-        dailyGoal: bailey.dailyGoal || 13500,
-        goalPercent: bailey.dailyGoal ? Math.round(((activity.steps || 0) / bailey.dailyGoal) * 100) : 0,
-        battery: device.batteryPercent || 0,
-        lastDeviceSync: device.lastHeardFromDevice || null,
+        name: pet.name || 'Bailey',
+        breed: pet.breed?.name || 'American Pit Bull Terrier',
+        weight: pet.weight,
+        photo: pet.photos?.first?.image?.fullSize || null,
+        steps: daily.totalSteps || 0,
+        dailyGoal: daily.stepGoal || 13500,
+        goalPercent: daily.stepGoal ? Math.round(((daily.totalSteps || 0) / daily.stepGoal) * 100) : 0,
+        distance: daily.totalDistance || 0,
+        weeklySteps: weekly.totalSteps || 0,
+        weeklyDistance: weekly.totalDistance || 0,
+        activityType: activity.__typename || 'Unknown',
+        activityStart: activity.start || null,
+        totalActivitySteps: activity.totalSteps || 0,
+        location,
+        lat,
+        lng,
+        sleep: sleepData,
+        battery: connection.__typename === 'ConnectedToCellular' ? connection.signalStrengthPercent : null,
+        connectionType: connection.__typename || 'Unknown',
+        connectionDate: connection.date || null,
+        ledColor: device.ledColor?.name || null,
+        ledHex: device.ledColor?.hexCode || null,
         lastSync: new Date().toISOString(),
       },
     };
@@ -135,9 +176,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
-  return NextResponse.json({
-    status: 'ok',
-    message: 'Use POST to sync Fi data',
-  });
+export async function GET() {
+  return NextResponse.json({ status: 'ok', message: 'Use POST to sync Fi data' });
 }
