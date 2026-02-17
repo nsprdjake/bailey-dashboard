@@ -103,17 +103,33 @@ export default function ActivityPage() {
       setSyncing(true);
       setSyncStatus(null);
 
-      const response = await fetch('/api/fi-sync', {
+      const response = await fetch('/api/fi/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: 7 }),
       });
 
       const result = await response.json();
       
+      if (result.success && result.data) {
+        // Update local state with Fi data
+        const fiData = result.data;
+        setActivities([{
+          date: new Date().toISOString().split('T')[0],
+          steps: fiData.steps,
+          distance_miles: fiData.distance,
+          daily_goal: fiData.dailyGoal,
+          goal_percentage: fiData.goalPercent,
+          activity_type: fiData.activityType,
+          location: fiData.location,
+          synced_from_fi: true,
+        }]);
+      }
+
       setSyncStatus({
         success: result.success,
-        message: result.message || (result.success ? 'Sync completed!' : 'Sync failed'),
+        message: result.success 
+          ? `Synced! ${result.data?.steps || 0} steps today (${result.data?.goalPercent || 0}% of goal)` 
+          : (result.error || 'Sync failed'),
       });
 
       if (result.success) {
