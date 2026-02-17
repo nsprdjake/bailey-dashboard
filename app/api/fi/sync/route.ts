@@ -1,166 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client with service role for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Fi uses a GraphQL API
+const FI_GRAPHQL_URL = 'https://api.tryfi.com/graphql';
 
-// Fi API endpoints (reverse-engineered from PyTryFi)
-const FI_API_BASE = 'https://api.tryfi.com/';
-const FI_AUTH_ENDPOINT = 'auth/login';
-const FI_PETS_ENDPOINT = 'pets';
-
-interface FiAuthResponse {
-  sessionToken: string;
-  userId: string;
-}
-
-interface FiPet {
-  id: string;
-  name: string;
-  breed: string;
-  dailyGoal: number;
-  currentActivity: {
-    steps: number;
-    distance: number;
-    minutes: number;
+async function fiGraphQL(query: string, variables: Record<string, any> = {}, sessionId?: string) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
   };
-  location: {
-    latitude: number;
-    longitude: number;
-    placeName: string;
-    placeAddress: string;
-    timestamp: string;
-  };
-  device: {
-    batteryPercent: number;
-    lastSync: string;
-  };
+  if (sessionId) {
+    headers['Authorization'] = `Bearer ${sessionId}`;
+    headers['cookie'] = `sessionId=${sessionId}`;
+  }
+  const res = await fetch(FI_GRAPHQL_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error(`Fi API error: ${res.status}`);
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors[0]?.message || 'GraphQL error');
+  return json.data;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Get Fi credentials from environment
     const fiEmail = process.env.FI_EMAIL;
     const fiPassword = process.env.FI_PASSWORD;
 
     if (!fiEmail || !fiPassword) {
-      return NextResponse.json(
-        { error: 'Fi credentials not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Fi credentials not configured' }, { status: 500 });
     }
 
-    // Authenticate with Fi
-    const authResponse = await fetch(`${FI_API_BASE}${FI_AUTH_ENDPOINT}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: fiEmail,
-        password: fiPassword,
-      }),
+    // Step 1: Authenticate
+    const authQuery = `
+      mutation signIn($input: SignInInput!) {
+        signIn(input: $input) {
+          user { id }
+          session { token }
+          error { message }
+        }
+      }
+    `;
+    const authData = await fiGraphQL(authQuery, {
+      input: { email: fiEmail, password: fiPassword }
     });
 
-    if (!authResponse.ok) {
-      throw new Error('Failed to authenticate with Fi');
-    }
+    const session = authData?.signIn?.session;
+    const authError = authData?.signIn?.error;
+    if (authError) throw new Error(`Fi auth: ${authError.message}`);
+    if (!session?.token) throw new Error('No session token from Fi');
+    const token = session.token;
 
-    const authData: FiAuthResponse = await authResponse.json();
-
-    // Get pets data
-    const petsResponse = await fetch(`${FI_API_BASE}${FI_PETS_ENDPOINT}`, {
-      headers: {
-        'Authorization': `Bearer ${authData.sessionToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!petsResponse.ok) {
-      throw new Error('Failed to fetch pets data');
-    }
-
-    const pets: FiPet[] = await petsResponse.json();
+    // Step 2: Get current user + pet data
+    const petQuery = `
+      {
+        currentUser {
+          userHouseholds {
+            household {
+              pets {
+                id
+                name
+                breed { name }
+                gender
+                weight
+                photos { first { image { fullSize } } }
+                dailyGoal
+                currentActivitySummary {
+                  steps
+                  totalDistance
+                  totalActivityDuration
+                }
+                device {
+                  batteryPercent
+                  lastHeardFromDevice
+                }
+                ongoingActivity {
+                  presentUser { id }
+                  start
+                  areaName
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+    const petData = await fiGraphQL(petQuery, {}, token);
 
     // Find Bailey
-    const bailey = pets.find(pet => pet.name.toLowerCase() === 'bailey');
+    const households = petData?.currentUser?.userHouseholds || [];
+    let bailey: any = null;
+    for (const uh of households) {
+      const pets = uh?.household?.pets || [];
+      for (const pet of pets) {
+        if (pet.name?.toLowerCase() === 'bailey') {
+          bailey = pet;
+          break;
+        }
+      }
+      if (bailey) break;
+    }
 
     if (!bailey) {
-      return NextResponse.json(
-        { error: 'Bailey not found in Fi account' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Bailey not found in Fi account' }, { status: 404 });
     }
 
-    // Prepare data for storage
-    const activityData = {
-      pet_name: bailey.name,
-      date: new Date().toISOString().split('T')[0],
-      steps: bailey.currentActivity.steps,
-      distance_miles: bailey.currentActivity.distance,
-      activity_minutes: bailey.currentActivity.minutes,
-      daily_goal: bailey.dailyGoal,
-      goal_percentage: Math.round((bailey.currentActivity.steps / bailey.dailyGoal) * 100),
-      battery_percent: bailey.device.batteryPercent,
-      last_sync: bailey.device.lastSync,
-      location_lat: bailey.location.latitude,
-      location_lng: bailey.location.longitude,
-      location_name: bailey.location.placeName,
-      location_address: bailey.location.placeAddress,
-      created_at: new Date().toISOString(),
-    };
+    const activity = bailey.currentActivitySummary || {};
+    const device = bailey.device || {};
 
-    // Check if we already have data for today
-    const { data: existingData } = await supabase
-      .from('fi_activity_logs')
-      .select('id')
-      .eq('date', activityData.date)
-      .single();
-
-    let result;
-    if (existingData) {
-      // Update existing record
-      result = await supabase
-        .from('fi_activity_logs')
-        .update(activityData)
-        .eq('id', existingData.id);
-    } else {
-      // Insert new record
-      result = await supabase
-        .from('fi_activity_logs')
-        .insert(activityData);
-    }
-
-    if (result.error) {
-      throw new Error(`Failed to save Fi data: ${result.error.message}`);
-    }
-
-    // Also update the current stats in a summary table (if exists)
-    await supabase
-      .from('bailey_current_stats')
-      .upsert({
-        id: 1, // Single row for current stats
-        last_fi_sync: new Date().toISOString(),
-        current_steps: bailey.currentActivity.steps,
-        current_distance: bailey.currentActivity.distance,
-        current_battery: bailey.device.batteryPercent,
-        current_location: bailey.location.placeName,
-        updated_at: new Date().toISOString(),
-      });
-
-    return NextResponse.json({
+    const result = {
       success: true,
       data: {
-        steps: bailey.currentActivity.steps,
-        distance: bailey.currentActivity.distance,
-        battery: bailey.device.batteryPercent,
-        location: bailey.location.placeName,
+        name: bailey.name,
+        breed: bailey.breed?.name || 'Unknown',
+        steps: activity.steps || 0,
+        distance: activity.totalDistance || 0,
+        activityMinutes: activity.totalActivityDuration || 0,
+        dailyGoal: bailey.dailyGoal || 13500,
+        goalPercent: bailey.dailyGoal ? Math.round(((activity.steps || 0) / bailey.dailyGoal) * 100) : 0,
+        battery: device.batteryPercent || 0,
+        lastDeviceSync: device.lastHeardFromDevice || null,
         lastSync: new Date().toISOString(),
       },
-    });
+    };
+
+    return NextResponse.json(result);
 
   } catch (error: any) {
     console.error('Fi sync error:', error);
@@ -171,29 +135,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint to check last sync status
 export async function GET(request: NextRequest) {
-  try {
-    const { data, error } = await supabase
-      .from('bailey_current_stats')
-      .select('last_fi_sync, current_steps, current_battery, current_location')
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return NextResponse.json({
-      lastSync: data?.last_fi_sync || null,
-      currentSteps: data?.current_steps || 0,
-      currentBattery: data?.current_battery || 0,
-      currentLocation: data?.current_location || 'Unknown',
-    });
-
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: 'Failed to get sync status' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({
+    status: 'ok',
+    message: 'Use POST to sync Fi data',
+  });
 }
