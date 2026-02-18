@@ -90,7 +90,27 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Step 2: Get pet activity stats
+    // Step 2: Get pet activity stats — first test with a simple query
+    const testQuery = `query { pet(id: "${BAILEY_PET_ID}") { name } }`;
+    const testRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(testQuery)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookieHeader },
+    });
+    const testData = await testRes.json();
+    
+    // If test query fails, return debug info
+    if (testData.error || !testData.data?.pet) {
+      return NextResponse.json({
+        error: 'GraphQL auth failed',
+        debug: {
+          cookieHeader: cookieHeader.substring(0, 80) + '...',
+          cookieHasFiSid: cookieHeader.includes('fi.sid'),
+          testResponse: testData,
+        }
+      }, { status: 500 });
+    }
+
+    // Real queries
     const statsQuery = `query { pet (id: "${BAILEY_PET_ID}") { dailyStat: currentActivitySummary (period: DAILY) { ...ActivitySummaryDetails } weeklyStat: currentActivitySummary (period: WEEKLY) { ...ActivitySummaryDetails } } }` + FRAGMENTS;
 
     const statsRes = await fetch(`${FI_BASE}/graphql?query=${encodeURIComponent(statsQuery)}`, {
