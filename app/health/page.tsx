@@ -1,29 +1,9 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { supabase, VetRecord, Medication, WeightLog } from '../../lib/supabase';
+import { supabase, VetRecord, Medication, WeightLog, FiActivity, FiSleep } from '../../lib/supabase';
 import { Pill, Calendar, AlertCircle, FileText, Plus, DollarSign, Scale, Syringe, Stethoscope, Activity, Moon, MapPin, Battery, TrendingUp, TrendingDown } from 'lucide-react';
 import { format } from 'date-fns';
-
-interface FiActivity {
-  id: string;
-  date: string;
-  steps: number;
-  distance_miles: number;
-  calories: number;
-  active_minutes: number;
-  rest_minutes: number;
-}
-
-interface FiSleep {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  duration_minutes: number;
-  type: 'nap' | 'sleep';
-  quality?: number;
-}
 
 export default function HealthPage() {
   const [vetRecords, setVetRecords] = useState<VetRecord[]>([]);
@@ -143,8 +123,8 @@ export default function HealthPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 font-medium">Today's Steps</p>
-              <p className="text-2xl font-bold text-gray-900">{todayActivity ? todayActivity.steps.toLocaleString() : '--'}</p>
-              <p className="text-xs text-gray-400">{todayActivity ? `${todayActivity.distance_miles.toFixed(1)} miles` : 'No data'}</p>
+              <p className="text-2xl font-bold text-gray-900">{todayActivity ? todayActivity.total_steps.toLocaleString() : '--'}</p>
+              <p className="text-xs text-gray-400">{todayActivity ? `${(todayActivity.total_distance_meters / 1609.34).toFixed(1)} miles` : 'No data'}</p>
             </div>
           </div>
 
@@ -283,14 +263,14 @@ export default function HealthPage() {
                       <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
                         <div 
                           className="bg-orange-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min((day.steps / 13500) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((day.total_steps / (day.daily_goal_steps || 13500)) * 100, 100)}%` }}
                         />
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-700">
-                          {day.steps.toLocaleString()} steps
+                          {day.total_steps.toLocaleString()} steps
                         </span>
                       </div>
                       <div className="text-sm text-gray-600 w-16 text-right">
-                        {day.distance_miles.toFixed(1)} mi
+                        {(day.total_distance_meters / 1609.34).toFixed(1)} mi
                       </div>
                     </div>
                   ))}
@@ -307,7 +287,7 @@ export default function HealthPage() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="font-medium text-gray-900">
-                          {sleep.type === 'sleep' ? '😴 Night Sleep' : '💤 Nap'}
+                          {sleep.sleep_type === 'deep_sleep' ? '😴 Night Sleep' : '💤 Nap'}
                         </p>
                         <p className="text-sm text-gray-500">
                           {new Date(sleep.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
